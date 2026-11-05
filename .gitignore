@@ -1,0 +1,44 @@
+# ---- build output
+**/bin/
+**/obj/
+**/dist/
+**/.angular/
+**/node_modules/
+**/TestResults/
+*.user
+.vs/
+
+# ---- runtime files
+**/logs/
+*.log
+backend/RockyTelecom.Api/wwwroot/uploads/
+backend/RockyTelecom.Api/*.db
+backend/RockyTelecom.Api/*.db-*
+
+# ---- secrets and local config (copy .env.example to .env)
+.env
+.env.*
+!.env.example
+deploy/certs/
+ops/backups/
+**/appsettings.Local.json
+**/secrets.json
+
+# ---- test artefacts
+frontend/test-results/
+frontend/playwright-report/
+frontend/playwright/.cache/
+
+# ---- scratch files left by manual API testing at the repo root
+/*.json
+/*.log
+
+# ---- editor / agent tooling
+.idea/
+.vscode/
+.freebuff/
+.codebase-memory/
+.claude/
+.playwright-mcp/
+graphify-out/
+OPENCODE_PROJECT_WORKFLOW.md

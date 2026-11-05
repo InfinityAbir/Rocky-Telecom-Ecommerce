@@ -1,0 +1,92 @@
+# Rocky Telecom production-shaped stack: nginx -> web-ssr + api -> sql + redis.
+# Usage:  cp .env.example .env   (fill in secrets)   then   docker compose up -d --build
+name: rocky-telecom
+
+services:
+  sql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${SQL_SA_PASSWORD:?set SQL_SA_PASSWORD in .env}
+      MSSQL_PID: Express
+    volumes:
+      - sqldata:/var/opt/mssql
+      - ./ops/backups:/var/opt/mssql/backups
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -Q 'SELECT 1' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  api:
+    build: ./backend
+    depends_on:
+      sql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__Default: "Server=sql,1433;Database=RockyTelecom;User Id=sa;Password=${SQL_SA_PASSWORD};TrustServerCertificate=True;Encrypt=True"
+      ConnectionStrings__Redis: "redis:6379"
+      Cache__Provider: redis
+      Jwt__Key: ${JWT_KEY:?set JWT_KEY (32+ random characters) in .env}
+      Client__Origin: ${SITE_URL:?set SITE_URL, e.g. https://shop.example.com}
+      Database__MigrateOnStartup: "true"
+      # Demo data and the seeded admin are for staging only; leave off in production.
+      Seed__Enabled: ${SEED_ENABLED:-false}
+      Seed__AdminPhone: ${ADMIN_PHONE:-}
+      Seed__AdminPassword: ${ADMIN_PASSWORD:-}
+      Payment__Provider: ${PAYMENT_PROVIDER:-mock}
+    volumes:
+      - uploads:/app/wwwroot/uploads
+      - apilogs:/app/logs
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080 && printf \"GET /health HTTP/1.0\r\n\r\n\" >&3 && head -n1 <&3 | grep -q 200'"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+
+  web:
+    build: ./frontend
+    depends_on:
+      api: { condition: service_healthy }
+    environment:
+      PORT: "4000"
+      SITE_URL: ${SITE_URL}
+      API_INTERNAL_URL: http://api:8080
+      API_BASE_URL: http://api:8080/api/v1
+      # Empty = the browser calls /api on the site's own origin (nginx routes it).
+      PUBLIC_API_ORIGIN: ""
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:1.27-alpine
+    depends_on: [web, api]
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./deploy/certs:/etc/nginx/certs:ro
+    restart: unless-stopped
+
+volumes:
+  sqldata:
+  redisdata:
+  uploads:
+  apilogs:

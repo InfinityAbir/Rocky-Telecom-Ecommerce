@@ -1,0 +1,17 @@
+  @if (showStorefront()) {
+    <rt-top-strip />
+    <rt-header />
+  }
+
+  <main class="rt-main">
+    <router-outlet />
+  </main>
+
+  @if (showStorefront()) {
+    <rt-footer />
+    <rt-bottom-nav />
+    <rt-category-drawer />
+    <rt-help-widget />
+  }
+
+  <rt-toast-host />
